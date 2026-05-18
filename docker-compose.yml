@@ -13,11 +13,11 @@ services:
       # Prometheus 主配置文件（只读，避免容器内误修改）
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       # Prometheus 数据存储目录（非常重要）
-      # 👉 所有监控数据（时间序列）都在这里
-      # 👉 不挂载 = 重启数据全丢
+      # 所有监控数据（时间序列）都在这里
+      # 不挂载 = 重启数据全丢
       - ./prometheus/data:/prometheus
       # 告警规则 / recording rules 存放目录
-      # 👉 后续做告警（CPU > 80%）会用到
+      # 后续做告警（CPU > 80%）会用到
       - ./prometheus/rules:/etc/prometheus/rules
     command:
       # 指定配置文件路径
