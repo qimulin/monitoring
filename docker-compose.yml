@@ -1,0 +1,132 @@
+
+services:
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: prometheus
+    user: root
+    environment:
+      - TZ=Asia/Shanghai
+    ports:
+      - "9090:9090"   # 对外暴露 Prometheus UI（浏览器访问用）
+    volumes:
+      # Prometheus 主配置文件（只读，避免容器内误修改）
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Prometheus 数据存储目录（非常重要）
+      # 👉 所有监控数据（时间序列）都在这里
+      # 👉 不挂载 = 重启数据全丢
+      - ./prometheus/data:/prometheus
+      # 告警规则 / recording rules 存放目录
+      # 👉 后续做告警（CPU > 80%）会用到
+      - ./prometheus/rules:/etc/prometheus/rules
+    command:
+      # 指定配置文件路径
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      # 数据库存储路径（对应上面的 data 挂载）
+      - '--storage.tsdb.path=/prometheus'
+      # 数据保留时间（超过自动删除）
+      - '--storage.tsdb.retention.time=15d'
+      # 数据最大占用（防止磁盘爆）
+      - '--storage.tsdb.retention.size=20GB'
+      # 开启热加载（改配置不用重启）
+      - '--web.enable-lifecycle'
+    restart: always
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.1
+    container_name: node-exporter
+    # 使用宿主机网络（关键！）
+    # 👉 否则采集到的是容器数据，不是服务器真实数据
+    network_mode: host
+    # 使用宿主机进程空间（用于获取系统信息）
+    pid: host
+    restart: always
+    volumes:
+      # 挂载整个根目录（只读）
+      # 👉 用于获取磁盘、文件系统等信息
+      - /:/host:ro,rslave
+      # 挂载 /proc（进程信息）
+      # 👉 CPU、进程、负载等数据来源
+      - /proc:/host/proc:ro
+      # 挂载 /sys（内核/硬件信息）
+      - /sys:/host/sys:ro
+      # 主机名（用于 Grafana 显示）
+      - /etc/hostname:/etc/nodename:ro
+    command:
+      # 指定 rootfs 路径
+      - '--path.rootfs=/host'
+      # 指定 proc 路径
+      - '--path.procfs=/host/proc'
+      # 指定 sys 路径
+      - '--path.sysfs=/host/sys'
+      # 开启 systemd 采集（查看服务状态）
+      - '--collector.systemd'
+
+  postgres_exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.19.1
+    container_name: postgres_exporter
+    network_mode: host
+    restart: always
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:difyai123456@192.168.128.228:5432/dify?sslmode=disable"
+      # 启用 pg_stat_statements 指标采集器
+      ENABLE_STATEMENTS_COLLECTOR: "true"
+    volumes:
+      - ./postgres_exporter/postgres_exporter.yml:/postgres_exporter.yml
+    command:
+      - "--extend.query-path=/postgres_exporter.yml"
+
+# 目前部署在另外一台IP的远程服务器上 
+  # alertmanager:
+  #   image: prom/alertmanager:v0.28.0
+  #   container_name: alertmanager
+  #   user: root
+  #   environment:
+  #     - TZ=Asia/Shanghai
+  #   ports:
+  #     - "9093:9093"   # Alertmanager UI
+  #   volumes:
+  #     # 主配置文件
+  #     - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+  #     # 模版文件
+  #     - ./alertmanager/templates:/etc/alertmanager/templates:ro
+  #     # 数据目录（静默、状态等）
+  #     - ./alertmanager/data:/alertmanager
+  #     # SMTP 授权码等敏感文件
+  #     - ./alertmanager/secrets:/etc/alertmanager/secrets:ro
+  #   command:
+  #     - '--config.file=/etc/alertmanager/alertmanager.yml'
+  #     - '--storage.path=/alertmanager'
+  #   restart: always
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: grafana
+    # grafana 默认运行用户（避免权限问题）
+    user: "472"
+    network_mode: host
+    environment:
+      - TZ=Asia/Shanghai
+      - GF_SECURITY_ADMIN_PASSWORD=admin   # 默认管理员密码
+      # 同时输出日志到控制台 + 文件
+      - GF_LOG_MODE=console file
+      # 指定日志目录（对应下面挂载）
+      - GF_PATHS_LOGS=/var/log/grafana
+    volumes:
+      # 数据目录（最重要）
+      - ./grafana/data:/var/lib/grafana
+      # 日志目录（排查问题用）
+      - ./grafana/logs:/var/log/grafana
+      # provisioning（自动化配置）
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    restart: always
+
+  # 监控栈反向代理；各上游在 nginx/conf.d/ 下单独建 .conf，按需增加 ports 映射
+  nginx:
+    image: nginx:latest
+    container_name: monitoring-nginx
+    ports:
+      - "19093:9093"   # Alertmanager（见 nginx/conf.d/alertmanager.conf）
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+    restart: always

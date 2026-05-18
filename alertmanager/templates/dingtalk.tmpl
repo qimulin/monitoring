@@ -1,0 +1,38 @@
+{{ define "dingtalk.message" }}
+{{- if .Alerts.Firing -}}
+{{- range .Alerts }}
+## 告警通知
+
+---
+
+**状态**：<font color=#FF0000>**FIRING**</font>
+**告警名称**：{{ .Labels.alertname }}
+**告警级别**：{{ .Labels.severity }}
+**实例**：{{ .Labels.instance }}
+
+**描述**：{{ .Annotations.summary }}
+**触发时间**：{{ .StartsAt.Format "2006-01-02 15:04:05" }}
+
+---
+{{- end }}
+{{- end }}
+
+{{- if .Alerts.Resolved -}}
+{{- range .Alerts }}
+## 告警恢复
+
+---
+
+**状态**：<font color=#00FF00>**RESOLVED**</font>
+**告警名称**：{{ .Labels.alertname }}
+**告警级别**：{{ .Labels.severity }}
+**实例**：{{ .Labels.instance }}
+
+**描述**：{{ .Annotations.summary }}
+**触发时间**：{{ .StartsAt.Format "2006-01-02 15:04:05" }}
+**恢复时间**：{{ .EndsAt.Format "2006-01-02 15:04:05" }}
+
+---
+{{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,135 @@
+global:
+  resolve_timeout: 5m
+  # ========== 阿里企业邮箱 SMTP 配置 ==========
+  smtp_from: 'linxichun@citydo.com.cn'                                # 发件人邮箱
+  smtp_smarthost: 'smtp.qiye.aliyun.com:465'                          # 阿里企业邮箱 SMTP 服务器 + SSL端口
+  smtp_auth_username: 'linxichun@citydo.com.cn'                       # 邮箱账号
+  smtp_auth_password_file: '/etc/alertmanager/secrets/smtp_password'  # 授权码
+  smtp_require_tls: false                                             # 使用 SSL 时关闭 TLS
+
+# ========== 模板文件配置 ==========
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# ========== 根路由 ==========
+route:
+  receiver: 'info'                    # 默认接收器（兜底）
+  group_by: ['alertname', 'instance'] # 按告警名和实例分组
+  group_wait: 10s                     # 首次等待时间：发现告警后等value秒，看看还有没有其他告警一起发
+  group_interval: 30s                 # 同组告警间隔：有新告警加入时，至少隔value秒才能发（针对新告警，避免刷屏）
+  repeat_interval: 24h                # 重复发送间隔：同一个告警持续未恢复时，隔多久再提醒一次（针对旧告警，避免遗忘）
+
+  # 子路由：从高到低匹配（级别越高越靠前）
+  routes:
+    # 0. 业务系统邮件（alertname 固定为 BizEmail）
+    - match:
+        alertname: BizEmail
+      receiver: biz
+      group_wait: 1s
+      group_interval: 1m
+      repeat_interval: 24h
+      continue: false
+
+    # 1. emergency 级别（紧急）
+    - match:
+        severity: emergency
+      receiver: 'emergency'
+      group_wait: 5s
+      group_interval: 10s
+      repeat_interval: 30m            # 紧急告警30分钟重复提醒
+      continue: false
+
+    # 2. critical 级别（严重）
+    - match:
+        severity: critical
+      receiver: 'critical'
+      group_wait: 5s
+      group_interval: 15s
+      repeat_interval: 1h             # 严重告警1小时重复提醒
+      continue: false
+
+    # 3. warning 级别（警告）
+    - match:
+        severity: warning
+      receiver: 'warning'
+      group_wait: 10s
+      group_interval: 30s
+      repeat_interval: 4h             # 警告告警4小时重复提醒
+      continue: false
+
+    # 4. info 级别（信息）→ 只记录，不发通知
+    - match:
+        severity: info
+      receiver: 'info'
+      repeat_interval: 24h
+
+# ========== 接收器 ==========
+receivers:
+  - name: 'info'
+    # 不通知
+    email_configs:
+      - to: 'linxichun@citydo.com.cn'
+        headers:
+          Subject: '{{ template "email.subject" . }}'
+        html: '{{ template "email.html" . }}'
+        send_resolved: false
+  - name: 'warning'
+    # 路由已指向 info；保留接收器名便于以后恢复邮件
+
+  - name: 'critical'
+    email_configs:
+      - to: 'linxichun@citydo.com.cn'
+        headers:
+          Subject: '{{ template "email.subject" . }}'
+        html: '{{ template "email.html" . }}'
+        send_resolved: true
+      - to: 'yuqf@citydo.com.cn'
+        headers:
+          Subject: '{{ template "email.subject" . }}'
+        html: '{{ template "email.html" . }}'
+        send_resolved: false
+
+  - name: 'emergency'
+    email_configs:
+      - to: 'linxichun@citydo.com.cn'
+        headers:
+          Subject: '{{ template "email.subject" . }}'
+        html: '{{ template "email.html" . }}'
+        send_resolved: true
+      - to: 'caodx@citydo.com.cn'
+        headers:
+          Subject: '{{ template "email.subject" . }}'
+        html: '{{ template "email.html" . }}'
+        send_resolved: true
+  # webhook_configs:
+  #    - url: 'https://oapi.dingtalk.com/robot/send?access_token=3c04d8de951c804224f2cf29c8830ae8082f36d91c644612e3b452600bd57060'
+  #      send_resolved: true
+
+  # 勉强作为业务系统邮件服务
+  - name: biz
+    email_configs:
+      - to: 'caodx@citydo.com.cn'
+        headers:
+          Subject: '{{ template "biz.email.subject" . }}'
+        html: '{{ template "biz.email.html" . }}'
+        send_resolved: false
+
+# 抑制规则（避免告警风暴）
+inhibit_rules:
+  - source_match:
+      severity: emergency
+    target_match:
+      severity: critical
+    equal: ['instance', 'alertname']
+
+  - source_match:
+      severity: critical
+    target_match:
+      severity: warning
+    equal: ['instance', 'alertname']
+
+  - source_match:
+      severity: warning
+    target_match:
+      severity: info
+    equal: ['instance', 'alertname']

@@ -1,0 +1,11 @@
+{{ define "biz.email.subject" }}
+{{ .CommonAnnotations.email_subject }}
+{{ end }}
+
+{{ define "biz.email.html" }}
+<div style="font-family: 'Microsoft YaHei', Arial, sans-serif; max-width: 720px;">
+  {{ range .Alerts }}
+  <p style="margin: 0; line-height: 1.6; white-space: pre-wrap;">{{ .Annotations.email_body }}</p>
+  {{ end }}
+</div>
+{{ end }}

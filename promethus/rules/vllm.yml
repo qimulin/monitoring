@@ -1,0 +1,198 @@
+groups:
+- name: vllm-alerts
+  rules:
+  # =========================
+  # vLLM 无Token生成（服务可能卡死）
+  # =========================
+  - alert: VLLMGenerationStopped
+    expr: |
+      rate(vllm:generation_tokens_total[2m]) == 0
+      and
+      (vllm:num_requests_running + vllm:num_requests_waiting) > 0
+    for: 3m
+    labels:
+      severity: critical
+    annotations:
+      summary: "vLLM 有请求在处理但无Token生成输出，可能存在请求阻塞或服务异常"
+
+  - alert: VLLMGenerationStopped
+    expr: |
+      rate(vllm:generation_tokens_total[2m]) == 0
+      and
+      (vllm:num_requests_running + vllm:num_requests_waiting) > 0
+    for: 8m
+    labels:
+      severity: emergency
+    annotations:
+      summary: "vLLM 持续无Token生成输出，模型服务可能已卡死"
+
+  # =========================
+  # TTFT（首Token延迟）
+  # =========================
+  - alert: VLLMTTFTHigh
+    expr: |
+      histogram_quantile(
+        0.95,
+        sum by(le, instance)(
+          rate(vllm:time_to_first_token_seconds_bucket[2m])
+        )
+      ) > 5
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "vLLM 首Token响应时间过高（P95 > 5秒），用户已明显感知卡顿"
+
+  - alert: VLLMTTFTHigh
+    expr: |
+      histogram_quantile(
+        0.95,
+        sum by(le, instance)(
+          rate(vllm:time_to_first_token_seconds_bucket[2m])
+        )
+      ) > 10
+    for: 5m
+    labels:
+      severity: emergency
+    annotations:
+      summary: "vLLM 首Token响应时间严重过高（P95 > 10秒），服务可能已严重阻塞"
+
+  # =========================
+  # 请求总耗时（E2E Latency）
+  # =========================
+  - alert: VLLME2ELatencyHigh
+    expr: |
+      histogram_quantile(
+        0.95,
+        sum by(le, instance)(
+          rate(vllm:e2e_request_latency_seconds_bucket[5m])
+        )
+      ) > 20
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "vLLM 请求整体响应时间过高（P95 > 20秒）"
+
+  - alert: VLLME2ELatencyHigh
+    expr: |
+      histogram_quantile(
+        0.99,
+        sum by(le, instance)(
+          rate(vllm:e2e_request_latency_seconds_bucket[5m])
+        )
+      ) > 40
+    for: 5m
+    labels:
+      severity: emergency
+    annotations:
+      summary: "vLLM 请求整体响应时间严重异常（P99 > 40秒）"
+
+  # =========================
+  # Queue Time（排队时间，按"平均每请求排队秒数"计算）
+  # =========================
+  - alert: VLLMQueueTimeHigh
+    expr: |
+      rate(vllm:request_queue_time_seconds_sum[2m])
+      /
+      clamp_min(rate(vllm:request_queue_time_seconds_count[2m]), 1e-9)
+      > 1
+    for: 3m
+    labels:
+      severity: critical
+    annotations:
+      summary: "vLLM 请求排队时间过长，系统已出现明显排队"
+
+  - alert: VLLMQueueTimeHigh
+    expr: |
+      rate(vllm:request_queue_time_seconds_sum[2m])
+      /
+      clamp_min(rate(vllm:request_queue_time_seconds_count[2m]), 1e-9)
+      > 3
+    for: 5m
+    labels:
+      severity: emergency
+    annotations:
+      summary: "vLLM 请求排队时间严重过长，服务可能已过载"
+
+  # =========================
+  # Waiting Requests（等待请求）
+  # =========================
+  - alert: VLLMWaitingRequestsHigh
+    expr: vllm:num_requests_waiting > 30
+    for: 3m
+    labels:
+      severity: critical
+    annotations:
+      summary: "vLLM 等待中的请求数量过多，调度器压力较大"
+
+  - alert: VLLMWaitingRequestsHigh
+    expr: vllm:num_requests_waiting > 80
+    for: 5m
+    labels:
+      severity: emergency
+    annotations:
+      summary: "vLLM 等待中的请求数量严重过多，调度器可能已阻塞"
+
+  # =========================
+  # GPU KV Cache 使用率
+  # =========================
+  - alert: VLLMGPUCacheUsageHigh
+    expr: vllm:gpu_cache_usage_perc > 0.90
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "vLLM GPU KV Cache 使用率过高（>90%）"
+
+  - alert: VLLMGPUCacheUsageHigh
+    expr: vllm:gpu_cache_usage_perc > 0.97
+    for: 3m
+    labels:
+      severity: emergency
+    annotations:
+      summary: "vLLM GPU KV Cache 使用率接近耗尽（>97%）"
+
+  # =========================
+  # Swapped Requests（KV Cache已开始Swap）
+  # =========================
+  - alert: VLLMSwappedRequests
+    expr: vllm:num_requests_swapped > 0
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "vLLM 已出现 KV Cache Swap，部分请求已转移至CPU"
+
+  - alert: VLLMSwappedRequests
+    expr: vllm:num_requests_swapped > 10
+    for: 3m
+    labels:
+      severity: emergency
+    annotations:
+      summary: "vLLM 出现大量 KV Cache Swap，GPU显存可能严重不足"
+
+  # =========================
+  # Generation Throughput（输出吞吐）
+  # =========================
+  - alert: VLLMGenerationThroughputLow
+    expr: |
+      rate(vllm:generation_tokens_total[2m]) < 20
+      and
+      rate(vllm:request_success_total[5m]) > 0
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "vLLM Token生成吞吐量较低，模型推理性能下降"
+
+  - alert: VLLMGenerationThroughputLow
+    expr: |
+      rate(vllm:generation_tokens_total[2m]) < 5
+      and
+      rate(vllm:request_success_total[5m]) > 0
+    for: 5m
+    labels:
+      severity: emergency
+    annotations:
+      summary: "vLLM Token生成吞吐量严重下降，模型服务可能接近不可用"

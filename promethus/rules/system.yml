@@ -1,0 +1,85 @@
+groups:
+  - name: system-alerts
+    rules:
+
+      # =========================
+      # CPU 使用率告警（四级）
+      # =========================
+      - alert: CPUUsageHigh
+        expr: (100 - avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100) > 60
+        for: 2m
+        labels:
+          severity: info
+        annotations:
+          summary: "CPU使用率较高（>60%）"
+
+      - alert: CPUUsageHigh
+        expr: (100 - avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100) > 70
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU使用率较高（>70%）"
+
+      - alert: CPUUsageHigh
+        expr: (100 - avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100) > 85
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CPU使用率过高（>85%）"
+
+      - alert: CPUUsageHigh
+        expr: (100 - avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100) > 95
+        for: 30s
+        labels:
+          severity: emergency
+        annotations:
+          summary: "CPU使用率爆满（>95%）"
+
+      # =========================
+      # 内存使用率告警（四级）
+      # =========================
+      - alert: MemoryUsageHigh
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 60
+        for: 2m
+        labels:
+          severity: info
+        annotations:
+          summary: "内存使用率较高（>60%）"
+
+      - alert: MemoryUsageHigh
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 70
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "内存使用率较高（>70%）"
+
+      - alert: MemoryUsageHigh
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "内存使用率过高（>85%）"
+
+      - alert: MemoryUsageHigh
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+        for: 30s
+        labels:
+          severity: emergency
+        annotations:
+          summary: "内存使用率爆满（>95%）"
+
+      # 复合预警条件
+      - alert: SystemResourceHigh
+        expr:
+          (100 - avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100 > 90)
+          or
+          ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90)
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+         summary: "CPU或内存过高"
