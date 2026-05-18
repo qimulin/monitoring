@@ -36,17 +36,17 @@ services:
     image: prom/node-exporter:v1.8.1
     container_name: node-exporter
     # 使用宿主机网络（关键！）
-    # 👉 否则采集到的是容器数据，不是服务器真实数据
+    # 否则采集到的是容器数据，不是服务器真实数据
     network_mode: host
     # 使用宿主机进程空间（用于获取系统信息）
     pid: host
     restart: always
     volumes:
       # 挂载整个根目录（只读）
-      # 👉 用于获取磁盘、文件系统等信息
+      # 用于获取磁盘、文件系统等信息
       - /:/host:ro,rslave
       # 挂载 /proc（进程信息）
-      # 👉 CPU、进程、负载等数据来源
+      # CPU、进程、负载等数据来源
       - /proc:/host/proc:ro
       # 挂载 /sys（内核/硬件信息）
       - /sys:/host/sys:ro
